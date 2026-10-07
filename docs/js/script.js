@@ -153,6 +153,186 @@
     });
   })();
 
+  /* ---------- Lightbox: clique na foto amplia ----------
+     Vale para as galerias e para o carrossel da home. Aberto,
+     vira um carrossel em tela cheia com todas as fotos da página:
+     setas, teclado (← → Esc) e swipe no celular.
+     Roda antes do carrossel para pegar só os itens reais
+     (os clones do loop são mapeados pelo src da imagem).
+  ------------------------------------------------------ */
+  (function(){
+    var triggers = Array.prototype.slice.call(
+      document.querySelectorAll('.gallery-item, [data-car-track] > .car-item')
+    );
+    if(!triggers.length) return;
+
+    // maior imagem disponível no srcset (a de 1200px)
+    function largest(img){
+      var best = img.getAttribute('src'), bestW = 0;
+      (img.getAttribute('srcset') || '').split(',').forEach(function(part){
+        var bits = part.trim().split(/\s+/);
+        var w = parseInt(bits[1], 10) || 0;
+        if(bits[0] && w > bestW){ bestW = w; best = bits[0]; }
+      });
+      return best;
+    }
+
+    var photos = triggers.map(function(el){
+      var img = el.querySelector('img');
+      var yr = el.querySelector('.cap .yr');
+      var nm = el.querySelector('.cap .nm');
+      return {
+        key: img.getAttribute('src'),
+        src: largest(img),
+        alt: img.alt,
+        yr: yr ? yr.textContent : '',
+        nm: nm ? nm.textContent : img.alt
+      };
+    });
+
+    var L = isEN
+      ? { dialog:'Photo viewer', close:'Close', prev:'Previous photo', next:'Next photo', open:'Enlarge photo: ' }
+      : { dialog:'Visualizador de fotos', close:'Fechar', prev:'Foto anterior', next:'Próxima foto', open:'Ampliar foto: ' };
+
+    var box = document.createElement('div');
+    box.className = 'lightbox';
+    box.setAttribute('role','dialog');
+    box.setAttribute('aria-modal','true');
+    box.setAttribute('aria-label', L.dialog);
+    box.innerHTML =
+      '<div class="lb-top">' +
+        '<span class="lb-count" aria-live="polite"></span>' +
+        '<button type="button" class="lb-close" aria-label="' + L.close + '">&times;</button>' +
+      '</div>' +
+      '<button type="button" class="lb-arrow lb-prev" aria-label="' + L.prev + '">&lsaquo;</button>' +
+      '<figure class="lb-stage">' +
+        '<img class="lb-img" alt="" draggable="false">' +
+        '<figcaption class="lb-cap"><span class="yr"></span><span class="nm"></span></figcaption>' +
+      '</figure>' +
+      '<button type="button" class="lb-arrow lb-next" aria-label="' + L.next + '">&rsaquo;</button>';
+    document.body.appendChild(box);
+
+    var stage   = box.querySelector('.lb-stage');
+    var lbImg   = box.querySelector('.lb-img');
+    var count   = box.querySelector('.lb-count');
+    var capYr   = box.querySelector('.lb-cap .yr');
+    var capNm   = box.querySelector('.lb-cap .nm');
+    var btnPrev = box.querySelector('.lb-prev');
+    var btnNext = box.querySelector('.lb-next');
+    var btnClose= box.querySelector('.lb-close');
+
+    var current = 0, lastFocus = null, isOpen = false;
+    if(photos.length < 2) box.classList.add('is-single');
+
+    function preload(i){
+      var p = photos[(i + photos.length) % photos.length];
+      if(p) (new Image()).src = p.src;
+    }
+
+    function show(i, dir){
+      current = (i + photos.length) % photos.length;
+      var p = photos[current];
+      count.textContent = (current + 1) + ' / ' + photos.length;
+      capYr.textContent = p.yr;
+      capNm.textContent = p.nm;
+
+      box.style.setProperty('--lb-shift', (dir || 0) * 24 + 'px');
+      lbImg.classList.add('is-loading');
+      var loader = new Image();
+      loader.onload = loader.onerror = function(){
+        if(photos[current] !== p) return; // trocou de novo antes de carregar
+        lbImg.src = p.src;
+        lbImg.alt = p.alt;
+        void lbImg.offsetWidth;
+        lbImg.classList.remove('is-loading');
+      };
+      loader.src = p.src;
+
+      preload(current + 1);
+      preload(current - 1);
+    }
+
+    function open(i){
+      lastFocus = document.activeElement;
+      isOpen = true;
+      show(i, 0);
+      box.classList.add('is-open');
+      root.style.overflow = 'hidden';
+      btnClose.focus();
+    }
+    function close(){
+      isOpen = false;
+      box.classList.remove('is-open');
+      root.style.overflow = '';
+      if(lastFocus && lastFocus !== document.body && lastFocus.focus) lastFocus.focus();
+      else btnClose.blur();
+    }
+
+    // abrir: clique ou Enter/Espaço na foto
+    triggers.forEach(function(el, i){
+      var img = el.querySelector('img');
+      el.setAttribute('tabindex','0');
+      el.setAttribute('role','button');
+      el.setAttribute('aria-label', L.open + (img.alt || ''));
+      el.addEventListener('keydown', function(e){
+        if(e.key === 'Enter' || e.key === ' '){ e.preventDefault(); open(i); }
+      });
+      if(!el.matches('.car-item')) el.addEventListener('click', function(){ open(i); });
+    });
+
+    // carrossel: um clique só no track pega também os clones do loop
+    var track = document.querySelector('[data-car-track]');
+    if(track){
+      track.addEventListener('click', function(e){
+        var item = e.target.closest('.car-item');
+        if(!item) return;
+        var key = item.querySelector('img').getAttribute('src');
+        for(var k = 0; k < photos.length; k++){
+          if(photos[k].key === key){ open(k); return; }
+        }
+      });
+    }
+
+    btnPrev.addEventListener('click', function(){ show(current - 1, -1); });
+    btnNext.addEventListener('click', function(){ show(current + 1, 1); });
+    btnClose.addEventListener('click', close);
+
+    // clique fora da foto fecha
+    box.addEventListener('click', function(e){
+      if(e.target === box || e.target === stage) close();
+    });
+
+    document.addEventListener('keydown', function(e){
+      if(!isOpen) return;
+      if(e.key === 'Escape'){ close(); }
+      else if(e.key === 'ArrowLeft'){ show(current - 1, -1); }
+      else if(e.key === 'ArrowRight'){ show(current + 1, 1); }
+    });
+
+    // foco não escapa do lightbox enquanto aberto
+    document.addEventListener('focusin', function(e){
+      if(isOpen && !box.contains(e.target)) btnClose.focus();
+    });
+
+    // swipe no celular
+    var sx = 0, sy = 0, tracking = false;
+    box.addEventListener('touchstart', function(e){
+      if(e.touches.length !== 1) return;
+      tracking = true;
+      sx = e.touches[0].clientX;
+      sy = e.touches[0].clientY;
+    }, { passive:true });
+    box.addEventListener('touchend', function(e){
+      if(!tracking) return;
+      tracking = false;
+      var dx = e.changedTouches[0].clientX - sx;
+      var dy = e.changedTouches[0].clientY - sy;
+      if(Math.abs(dx) > 40 && Math.abs(dx) > Math.abs(dy)){
+        dx < 0 ? show(current + 1, 1) : show(current - 1, -1);
+      }
+    }, { passive:true });
+  })();
+
   /* ---------- Mini carrossel infinito ----------
      O HTML lista só os itens reais; os clones das pontas
      (para o loop) são criados aqui.
@@ -174,6 +354,10 @@
     function makeClone(el){
       var c = el.cloneNode(true);
       c.setAttribute('aria-hidden','true');
+      // clone não entra na navegação por teclado (o original já entra)
+      c.removeAttribute('tabindex');
+      c.removeAttribute('role');
+      c.removeAttribute('aria-label');
       var img = c.querySelector('img');
       if(img) img.alt = '';
       return c;
