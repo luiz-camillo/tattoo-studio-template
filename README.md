@@ -3,7 +3,7 @@
 Modelo de site para tatuador(a) no estilo **old school e tradicional americano**,
 apresentado com um estúdio fictício: **Lu Valente — Andorinha Negra Tattoo**.
 
-**Ver online:** https://SEUUSUARIO.github.io/tattoo-studio-template/
+**Ver online:** https://luiz-camillo.github.io/tattoo-studio-template/
 
 > Projeto demonstrativo. Nome, endereço e contatos são fictícios — os botões de
 > WhatsApp, Instagram e mapa exibem um aviso em vez de abrir um link real.
